@@ -1,7 +1,6 @@
 /**
  * 
  */
-package org.stevemaurer.opensource.mhs;
 
 import static org.junit.Assert.*;
 
@@ -15,14 +14,15 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.stevemaurer.opensource.mhs.MTSort;
 
-/**
+/*
  * JUnit - Correctness and performance tests for MTSort
- * 
  * These tests also log performance results to the console.
  * 
  * @author Steve Maurer
  */
+@SuppressWarnings({"RedundantThrows", "SpellCheckingInspection"})
 public class MTSortTest {
 	
 	Integer[] sortedArray;
@@ -30,21 +30,21 @@ public class MTSortTest {
 	static private ThreadPoolExecutor mThreadPool;
 
 	
-	public static final int kArrayLength = 0x100000;
+	public static final int kArrayLength = 0x400000;
 	
 	// Randomize an array. 
 	private void randomize(int length)
 	{
 		Random rand = new Random();
-//		long seed = rand.nextLong();
-//		System.out.println("Seed=" + seed);	// Print the seed, so the test can be reproduced if ever there is a problem
-//		rand = new Random(seed);
+
+		// In theory, you can to a nextLong(), print the seed, and recreate a repeatable Random if there ever is
+		// a correctness problem here.
 		for (int i = 0; i < length; i++ )
 			unsortedArray[i] =  rand.nextInt();
 	}
 
-	/**
-	 * @throws java.lang.Exception
+	/*
+	 * @throws java.lang.Exception -- If OS fails to allocate a resource
 	 */
 	@BeforeClass
 	public static void setUpBeforeClass() throws Exception
@@ -56,8 +56,8 @@ public class MTSortTest {
 							TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(availableProcessors));
 	}
 
-	/**
-	 * @throws java.lang.Exception
+	/*
+	 * @throws java.lang.Exception  -- If OS fails to allocate a resource
 	 */
 	@Before
 	public void setUp() throws Exception {
@@ -68,17 +68,17 @@ public class MTSortTest {
 		System.arraycopy(unsortedArray, 0, sortedArray, 0, unsortedArray.length);
 	}
 
-	/**
-	 * Test method for {@link org.stevemaurer.opensource.mhs.MTSort#MTsort(java.util.concurrent.ThreadPoolExecutor, T[])}.
-	 * @throws InterruptedException 
+	/*
+	 * Test method for {@link org.stevemaurer.opensource.mhs.MTSort#MTsort(java.util.concurrent.ThreadPoolExecutor, java.lang.Comparable[])}.
+	 * @throws InterruptedException -- If test is manually interrupted
 	 */
 	@Test
 	public void testMTsortThreadPoolExecutorTArray() throws InterruptedException
 	{
-			// Sort the array using the standard utility library. Keep the elapsed time.
+		// Sort the array using the standard utility library. Keep the elapsed time.
 		Arrays.sort(sortedArray);
 		
-			// Sort the array using the multithreaded library
+		// Sort the array using the multithreaded library
 		MTSort.MTsort(mThreadPool, unsortedArray);
 
 		// Test for correctness.Everything else is performance related.
@@ -93,19 +93,14 @@ public class MTSortTest {
 
 	}
 	
-	/**
-	 * Test method for {@link org.stevemaurer.opensource.mhs.MTSort#MTsort(java.util.concurrent.ThreadPoolExecutor, T[], int, int, int, Comparator<? super T> compar)}.
+	/*
+	 * Test method for {@link MTSort#MTsort(ThreadPoolExecutor, Comparable[], int, int, int, Comparator)}.
 	 */
 	@Test
 	public void testMTsortThreadPoolExecutorTArrayIntIntIntCompar() throws InterruptedException {
 		
 		// Make a Comparator that uses the reverse of the natural ordering.
-		Comparator<Integer> compFunc = new Comparator<Integer>() {
-			@Override
-			public int compare(Integer o1, Integer o2) {
-				return o2.compareTo(o1);
-			}
-		};
+		Comparator<Integer> compFunc = Comparator.reverseOrder();
 		
 		// Sort using the comparator function
 		Arrays.sort(sortedArray, compFunc);
@@ -124,8 +119,9 @@ public class MTSortTest {
 		}
 	}
 
-	/**
-	 * Test method for {@link org.stevemaurer.opensource.mhs.MTSort#MTsort(java.util.concurrent.ThreadPoolExecutor, T[], int, int, int)}.
+	/*
+	 * Test method for {@link org.stevemaurer.opensource.mhs.MTSort#MTsort(java.util.concurrent.ThreadPoolExecutor, java.lang.Comparable[], int, int, int)}.
+	 * It uses the built-in "natural" ordering code.
 	 */
 	@Test
 	public void testMTsortThreadPoolExecutorTArrayIntIntInt_PerformanceAnalysisNatural() throws InterruptedException {
@@ -135,7 +131,8 @@ public class MTSortTest {
 		unsortedArray = new Integer[ expandedArrayLength ];
 		
 		System.out.println("Natural ordering:");
-		
+
+		// Loop through various sorting lengths, starting at 0x1000 and doubling until we reach the array size
 		for ( int len = 0x1000; len <= expandedArrayLength; len <<= 1)
 		{
 			randomize(len);
@@ -148,14 +145,15 @@ public class MTSortTest {
 			long mtElapsedSortTime = -System.currentTimeMillis();
 			MTSort.MTsort(mThreadPool, unsortedArray, 0, len);
 			mtElapsedSortTime += System.currentTimeMillis();
-			
-			System.out.print("Size=" + len + "\tArrays.sort() time= " + elapsedSortTime + "mS    \t-- ");
-			System.out.println("MTSort.Mtsort(x" + mThreadPool.getMaximumPoolSize() + ") time= " + mtElapsedSortTime + "mS");
+			final int threads = Math.min(mThreadPool.getMaximumPoolSize(), Runtime.getRuntime().availableProcessors());
+
+			System.out.printf("Size=%-10d\tArrays.sort() time=%-10s", len, elapsedSortTime +"mS");
+			System.out.printf("-- MTSort.Mtsort(x%d) time=%dmS\n", threads, mtElapsedSortTime);
 		}
 	}
 
-	/**
-	 * Test method for {@link org.stevemaurer.opensource.mhs.MTSort#MTsort(java.util.concurrent.ThreadPoolExecutor, T[], int, int, int)}.
+	/*
+	 * Test method for {@link org.stevemaurer.opensource.mhs.MTSort#MTsort(java.util.concurrent.ThreadPoolExecutor, java.lang.Comparable[], int, int, int, java.util.Comparator)}.
 	 */
 	@Test
 	public void testMTsortThreadPoolExecutorTArrayIntIntInt_PerformanceAnalysisComparator() throws InterruptedException {
@@ -165,14 +163,11 @@ public class MTSortTest {
 		unsortedArray = new Integer[ expandedArrayLength ];
 		
 		// Make a Comparator that uses the reverse of the natural ordering.
-		Comparator<Integer> compFunc = new Comparator<Integer>() {
-			@Override
-			public int compare(Integer o1, Integer o2) {
-				return o2.compareTo(o1);
-			}
-		};
+		Comparator<Integer> compFunc = Comparator.reverseOrder();
 		
 		System.out.println("Comparator ordering:");
+
+		// Loop through various sorting lengths, starting at 0x1000 and doubling until we reach the array size
 		for ( int len = 0x1000; len <= expandedArrayLength; len <<= 1)
 		{
 			randomize(len);
@@ -183,12 +178,12 @@ public class MTSortTest {
 			elapsedSortTime += System.currentTimeMillis();
 			
 			long mtElapsedSortTime = -System.currentTimeMillis();
-			int threads = mThreadPool.getMaximumPoolSize();
+			final int threads = mThreadPool.getMaximumPoolSize();
 			MTSort.MTsort(mThreadPool, unsortedArray, 0, len, threads, compFunc);
 			mtElapsedSortTime += System.currentTimeMillis();
 			
-			System.out.print("Size=" + len + "\tArrays.sort() time= " + elapsedSortTime + "mS    \t-- ");
-			System.out.println("MTSort.Mtsort(x" + threads + ") time= " + mtElapsedSortTime + "mS");
+			System.out.printf("Size=%-10d\tArrays.sort() time=%-10s", len, elapsedSortTime +"mS");
+			System.out.printf("-- MTSort.Mtsort(x%d) time=%dmS\n", threads, mtElapsedSortTime);
 		}
 	}
 }

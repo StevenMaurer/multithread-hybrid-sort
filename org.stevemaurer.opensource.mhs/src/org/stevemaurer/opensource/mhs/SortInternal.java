@@ -4,17 +4,17 @@ import java.util.Comparator;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
 
-/**
+/*
  * DESCRIPTION:
  * An internal container class for a blazingly fast multithreaded hybrid sort.
  * This class is package local. Use it through its external interface MTSort.java
  * 
  * DESIGN NOTES:
  * This is really just a front end for java's built-in Arrays.sort(), which is a very elegant and fast 
- * heap sort. That class's lone major issue is it's lack of multithreading, which is corrected here.
+ * heap sort. That class's lone major issue is its lack of multithreading, which is corrected here.
  *
  * This is done by borrowing quick-sort's partitioning, subdividing each partition to sort in its own thread.
- * When a partition becomes too small or it runs out of threads, we fall back on the built-in. This hybrid
+ * When a partition becomes too small, or it runs out of threads, we fall back to the built-in. This hybrid
  * approach is naturally multithreaded. There are no synchronize() statements (or contention) at all because
  * each subdivision is entirely owned by each thread.
  * 
@@ -22,7 +22,7 @@ import java.util.concurrent.ThreadPoolExecutor;
  * other task that is scheduled on the (presumably shared) threadpool handed to this library. As a contrived
  * example, imagine an Runnable that grabs a lock A then B, and a hashCode() of <T> that grabs lock B then
  * A to return a value. This would normally work in a regular sort running in the same context as the Runnable,
- * but could have a deadlock if both Runnables were put on the same pool.Not expected to be a common situation.
+ * but could have a deadlock if both Runnables were put on the same pool. Not expected to be a common situation.
  * 
  * The sort can also run into performance issues if the threadpool is entirely clogged. But again, unlikely.
  * The efficiency of the sorting (vs non-multithreaded) can go down in large arrays due to memory contention; try
@@ -50,7 +50,7 @@ final class SortInternal<T extends Comparable<T>>
 		// The value is now set to a hard-coded 0x100 (256).
 	private static final int			kMinSegmentSize = 0x100;
 	
-	/**
+	/*
 	 * Sort in a multithreaded fashion recursively.
 	 * 
 	 * Sort is NOT done when this class is instanced. Rather, it is done when "permits" number of permits
@@ -62,15 +62,15 @@ final class SortInternal<T extends Comparable<T>>
 	 * @param array			Array to be sorted
 	 * @param base			Base of range to sort
 	 * @param onePastEnd	End of range to sort (exclusive)
-	 * @param compar		Comparator (null to use natural ordering)
+	 * @param comparator	Comparator (null to use natural ordering)
 	 */
-	public SortInternal(Semaphore doneSem, int permits, ThreadPoolExecutor pool, T[] array, int base, int onePastEnd, Comparator<? super T> compar)
+	public SortInternal(Semaphore doneSem, int permits, ThreadPoolExecutor pool, T[] array, int base, int onePastEnd, Comparator<? super T> comparator)
 	{
 			// First, initialize all our final values for use by all the SubSort instances
 		mDoneSem = doneSem;
 		mPool = pool;
 		mArray = array;
-		mCompar = compar;
+		mCompar = comparator;
 		
 			// Next, kick off our top level sort. Execute initial sort in the caller's context.
 		final SubSort internalSorter = new SubSort(permits, base, onePastEnd);
@@ -105,12 +105,12 @@ final class SortInternal<T extends Comparable<T>>
 		@Override
 		public void run()
 		{
-			/**
+			/*
 			 * Enclose everything in a for-loop used for tail-recursion
 			 */
 			for (;;)
 			{
-				/**
+				/*
 				 * If we are at a leaf of the thread permits, or our segment size has grown small enough that the
 				 * overhead is considered not worth it, fall back on sorting this section with java's mergesort.
 				 */
@@ -121,7 +121,7 @@ final class SortInternal<T extends Comparable<T>>
 					return;
 				}
 				
-				/**
+				/*
 				 * Select a (hopefully) median pivot and partition all elements in place so that all values
 				 * with indexes lowe than the pivot compare less to the pivot, and all in higher indexes
 				 * compare greater than the pivot value.
@@ -131,7 +131,7 @@ final class SortInternal<T extends Comparable<T>>
 				final int segmentLen = mOnePastEnd - mBase;
 				final int pivotIdx = mCompar!=null ? partitionCompar() : partitionNatural();
 				
-				/**
+				/*
 				 * Provision thread permits between the two partitions proportionally based on the pivot location
 				 * 
 				 * In other words, if our sort ended like this:
@@ -147,12 +147,12 @@ final class SortInternal<T extends Comparable<T>>
 				else if ( firstPartitionPermits == mPermits )
 					firstPartitionPermits--;
 				
-				/**
+				/*
 				 * Schedule each partition to be sorted in its own thread.
 				 */
 				mPool.execute(new SubSort(mPermits-firstPartitionPermits, pivotIdx, mOnePastEnd));
 	
-				/**
+				/*
 				 * For the first partition, use tail-recursion to reuse this thread and avoid overhead and stack depth.
 				 */
 				mPermits = firstPartitionPermits;
@@ -165,16 +165,16 @@ final class SortInternal<T extends Comparable<T>>
 		 * 
 		 * @return Index location of the selected pivot
 		 */
-		private final int partitionNatural()
+		private int partitionNatural()
 		{
-			/**
+			/*
 			 * Divide the range into three sections and select points p1, p2, & p3, from the center of each.
 			 * This is an attempt to avoid outliers which may be stuck on the ends of the array.
 			 */
 			final int segmentLen = mOnePastEnd - mBase;
 			final T p1 = mArray[mBase + segmentLen/6],	p2 = mArray[mBase + segmentLen/2], p3 = mArray[mBase + (int)((5L*segmentLen)/6)];
 			
-			/**
+			/*
 			 * Select the pivot by figuring out which is the median of p1, p2, & p3. Code is optimized so that
 			 * only two comparisons are needed to determine that p2 is the median.
 			 * 
@@ -195,7 +195,7 @@ final class SortInternal<T extends Comparable<T>>
 			else									// p1 <= p2 && p2 > p3 && p1 <= p3	means p3 is pivot
 				pivot = p3;
 			
-			/**
+			/*
 			 * Perform the actual partition, using the natural ordering
 			 */
 			for (int lo = mBase, hi = mOnePastEnd-1; ; lo++, hi--)
@@ -224,16 +224,16 @@ final class SortInternal<T extends Comparable<T>>
 		 * 
 		 * @return Index location of the selected pivot
 		 */
-		private final int partitionCompar()
+		private int partitionCompar()
 		{
-			/**
+			/*
 			 * Divide the range into three sections and select points p1, p2, & p3, from the center of each.
 			 * This is an attempt to avoid outliers which may be stuck on the ends of the array.
 			 */
 			final int segmentLen = mOnePastEnd - mBase;
 			final T p1 = mArray[mBase + segmentLen/6],	p2 = mArray[mBase + segmentLen/2], p3 = mArray[mBase + (int)((5L*segmentLen)/6)];
 			
-			/**
+			/*
 			 * Select the pivot by figuring out which is the median of p1, p2, & p3. Code is optimized so that
 			 * only two comparisons are needed to determine that p2 is the median.
 			 * 
@@ -254,7 +254,7 @@ final class SortInternal<T extends Comparable<T>>
 			else											// p1 <= p2 && p2 > p3 && p1 <= p3	means p3 is pivot
 				pivot = p3;
 			
-			/**
+			/*
 			 * Perform the actual partition, using mCompar to do the ordering
 			 */
 			for (int lo = mBase, hi = mOnePastEnd-1; ; lo++, hi--)
